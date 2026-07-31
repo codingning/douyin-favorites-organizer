@@ -1,0 +1,23 @@
+{
+  "name": "douyin-favorites-organizer",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "collect": "node src/cli.mjs collect",
+    "draft": "node src/cli.mjs draft",
+    "validate": "node src/cli.mjs validate",
+    "preview": "node src/cli.mjs preview",
+    "approve": "node src/cli.mjs approve",
+    "manifest": "node src/cli.mjs manifest",
+    "journal": "node src/cli.mjs journal",
+    "security-scan": "node scripts/security-scan.mjs",
+    "test": "node --test tests/*.test.mjs"
+  },
+  "dependencies": {
+    "@jackwener/opencli": "1.8.6"
+  },
+  "engines": {
+    "node": ">=22.13"
+  }
+}

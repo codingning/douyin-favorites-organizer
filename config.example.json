@@ -1,0 +1,8 @@
+{
+  "collection_limit": 200,
+  "folder_visibility": "private",
+  "minimum_confidence": 0.58,
+  "uncertain_folder": "待确认",
+  "preserve_existing_folders": true,
+  "require_preview_approval": true
+}

@@ -1,0 +1,4 @@
+interface:
+  display_name: "抖音收藏夹整理"
+  short_description: "分析抖音收藏视频内容，生成分类预览并在批准后安全整理收藏夹"
+  default_prompt: "分析我当前抖音收藏的视频内容，先生成分类与收藏夹变更预览；未经我明确批准，不要修改抖音账号。"
