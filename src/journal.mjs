@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { ensureDirectory } from "./io.mjs";
 
-const ALLOWED_STATUS = new Set(["started", "verified", "failed", "unknown"]);
+const ALLOWED_STATUS = new Set(["started", "verified", "failed", "unknown", "unavailable"]);
 const SENSITIVE_PATTERN = /cookie|token|authorization|password|二维码|request.?signature|x-bogus|msToken/iu;
 
 export function appendJournal(runDirectory, entry) {

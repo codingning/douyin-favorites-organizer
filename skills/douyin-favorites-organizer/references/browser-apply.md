@@ -27,12 +27,13 @@ Process one folder at a time and use bounded batches.
 
 1. Open the `视频` tab and click the unique `批量管理` control.
 2. Match cards by the numeric ID in their `/video/<aweme_id>` link, not by title alone. In management mode, map each checkbox to the nearest ancestor whose markup contains exactly one distinct `/video/<aweme_id>`; do not use a broad grid ancestor because it contains many IDs.
-3. Scroll incrementally until every intended ID for the bounded batch is mapped, or the list becomes stable. Stop if an intended ID cannot be found.
-4. Select only IDs listed for the current folder and verify the selected count.
-5. Click `加入收藏夹`. Never click the adjacent `取消收藏` action.
-6. Select the exact folder name and confirm once.
-7. Require an authoritative visible success signal before journaling the batch.
-8. Exit management mode before the next batch.
+3. Scroll every internal `auto`/`scroll` container incrementally until every intended ID for the bounded batch is mapped, or the list becomes stable.
+4. If a signed collection response contains an ID that remains absent after full internal scrolling and the page's own saved-item search, record it in `unavailable-video-ids.json`. Do not use a private endpoint to force the write; continue only with the visible subset and report the skipped IDs.
+5. Select only IDs listed for the current folder and verify the selected count.
+6. Click `加入收藏夹`. Never click the adjacent `取消收藏` action.
+7. Select the exact folder checkbox and click `确定` once.
+8. Verify the target folder's visible `共 N 作品` count equals the approved visible batch size before journaling the batch.
+9. Exit management mode before the next batch.
 
 ## Failure handling
 

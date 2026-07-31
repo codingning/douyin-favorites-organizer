@@ -61,6 +61,14 @@ Approval never authorizes deleting favorites, deleting folders, making folders p
 
 Use a browser surface that reuses the user's signed-in Douyin session. Follow [references/browser-apply.md](references/browser-apply.md) exactly.
 
+Use the deterministic wrapper when the current web contract matches:
+
+1. Run `npm run browser-apply -- preflight --run <RUN_DIR>`.
+2. Derive the execution token as `EXECUTE:<first 12 characters of plan_fingerprint>`.
+3. After action-time confirmation, run `npm run browser-apply -- create-folders --run <RUN_DIR> --execute --confirmation <TOKEN>`.
+4. Run one bounded folder batch at a time with `npm run browser-apply -- add-folder --run <RUN_DIR> --folder <NAME> --execute --confirmation <TOKEN>`.
+5. Run `npm run browser-apply -- close --run <RUN_DIR>` after final verification or on a stopped run.
+
 For each folder:
 
 1. Create it only if it does not already exist; keep `设置为公开` off.
@@ -85,6 +93,7 @@ Require all of the following before reporting completion:
 - The approved plan fingerprint matches the manifest.
 - Every planned folder has a verified final state.
 - Every batch has success evidence and a journal entry.
+- Every source video is either verified in a folder or explicitly recorded as unavailable in the current Douyin management UI.
 - No `取消收藏`, delete, public-folder, or unrelated account action occurred.
 
 Use `scripts/run-organizer.ps1` as the Windows wrapper when a direct npm command is inconvenient.

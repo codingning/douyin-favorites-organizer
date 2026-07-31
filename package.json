@@ -11,6 +11,7 @@
     "approve": "node src/cli.mjs approve",
     "manifest": "node src/cli.mjs manifest",
     "journal": "node src/cli.mjs journal",
+    "browser-apply": "node scripts/apply-browser.mjs",
     "security-scan": "node scripts/security-scan.mjs",
     "test": "node --test tests/*.test.mjs"
   },
