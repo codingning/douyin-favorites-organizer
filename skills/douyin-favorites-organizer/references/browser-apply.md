@@ -1,44 +1,47 @@
 # Browser apply contract
 
-The apply phase changes the user's Douyin account. Perform it only after both plan approval and an immediate action-time confirmation.
-
 ## Preflight
 
-1. Confirm the browser is signed in to the intended account without inspecting Cookies or storage.
+1. Confirm the intended Douyin account is signed in without inspecting authentication data.
 2. Open `https://www.douyin.com/user/self?showSubTab=favorite_folder&showTab=favorite_collection`.
-3. Verify the page exposes `收藏夹`, `视频`, `批量管理`, and `新建收藏夹`.
-4. Verify the manifest fingerprint matches the approved plan.
-5. If the UI or labels differ, stop and report drift.
+3. Verify `收藏夹`, `视频`, `批量管理`, and `新建收藏夹` are present.
+4. Run `inspect-folders` before classification and use the returned current names.
+5. Verify the approved plan fingerprint matches the manifest.
+6. Stop on UI drift, CAPTCHA, or ambiguous state.
 
 ## Create folders
 
-For each missing folder:
+For each missing manifest folder:
 
-1. Open the `收藏夹` tab and click the unique `新建收藏夹` button.
-2. Fill the exact folder name, at most 15 characters.
-3. Ensure `设置为公开` is off. The verified 2026-07-31 web form defaulted this switch to on, so explicitly verify the final state before submission.
-4. Submit once and verify the exact folder name is visible.
+1. Open `收藏夹` and click the unique `新建收藏夹` control.
+2. Fill the exact name, at most 15 characters.
+3. Set `设置为公开` to the manifest visibility. Recurring adaptive folders are public.
+4. Submit once.
+5. Verify the dialog closed, the exact name is visible, and the private-lock indicator agrees with the requested visibility.
 
-Do not rename, delete, merge, or change visibility of existing folders.
+Never rename, delete, merge, or change visibility of an existing folder.
 
 ## Add videos
 
-Process one folder at a time and use bounded batches.
+Process one folder at a time.
 
-1. Open the `视频` tab and click the unique `批量管理` control.
-2. Match cards by the numeric ID in their `/video/<aweme_id>` link, not by title alone. In management mode, map each checkbox to the nearest ancestor whose markup contains exactly one distinct `/video/<aweme_id>`; do not use a broad grid ancestor because it contains many IDs.
-3. Scroll every internal `auto`/`scroll` container incrementally until every intended ID for the bounded batch is mapped, or the list becomes stable.
-4. If a signed collection response contains an ID that remains absent after full internal scrolling and the page's own saved-item search, record it in `unavailable-video-ids.json`. Do not use a private endpoint to force the write; continue only with the visible subset and report the skipped IDs.
-5. Select only IDs listed for the current folder and verify the selected count.
-6. Click `加入收藏夹`. Never click the adjacent `取消收藏` action.
-7. Select the exact folder checkbox and click `确定` once.
-8. Verify the target folder's visible `共 N 作品` count equals the approved visible batch size before journaling the batch.
-9. Exit management mode before the next batch.
+1. Record the target folder's baseline `共 N 作品` count.
+2. Open `视频` → `批量管理`.
+3. Match cards by the exact numeric `/video/<aweme_id>` link, not title.
+4. Scroll bounded internal containers until every intended ID is mapped or the list stabilizes.
+5. Record persistently absent IDs as `unavailable`; never use a private endpoint to force a write.
+6. Select only the intended IDs and verify the selected count.
+7. Click `加入收藏夹`; never click `取消收藏`.
+8. Select the exact folder and submit once.
+9. Verify the final folder count equals baseline plus the verified batch size.
+10. Journal baseline, final count, IDs, and status before moving to the next folder.
+
+An exact batch already marked `verified` in the journal may be skipped. Do not infer success from count alone after an unknown submit.
 
 ## Failure handling
 
-- Stop on ambiguous selectors, mismatched counts, missing IDs, unknown modals, CAPTCHA, or verification failure.
-- Do not repeat a submit action whose result is unknown.
-- Resume from the local journal only after checking the visible current state.
-- Hand CAPTCHA handling to the user; do not bypass it.
-- Never use private undocumented endpoints as a fallback for a failed UI action.
+- Stop on ambiguous selectors, count mismatches, unknown dialogs, CAPTCHA, missing IDs, or uncertain submit results.
+- Do not repeat a submit until visible state proves the first attempt did not apply.
+- Resume only from current page state plus the local journal.
+- Hand CAPTCHA and login recovery to the user.
+- Never use undocumented private endpoints as a fallback.

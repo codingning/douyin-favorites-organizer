@@ -7,6 +7,7 @@ import { approvePlan, approvalToken, buildApplyManifest, validatePlan } from "./
 import { readJson, writeJson, writeText } from "./io.mjs";
 import { renderPreview } from "./preview.mjs";
 import { appendJournal } from "./journal.mjs";
+import { commitIncrementalRun, prepareIncrementalRun } from "./incremental.mjs";
 
 const PROJECT_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -29,8 +30,9 @@ function resolveRun(args) {
 }
 
 function loadRun(run) {
+  const incrementalFile = path.join(run, "incremental-favorites.json");
   return {
-    source: readJson(path.join(run, "favorites.json")),
+    source: readJson(fs.existsSync(incrementalFile) ? incrementalFile : path.join(run, "favorites.json")),
     plan: readJson(path.join(run, "classification-plan.json")),
   };
 }
@@ -51,8 +53,31 @@ async function main() {
     const result = writeDraftPlan(run, {
       minimumConfidence: args.minimum_confidence ? Number(args.minimum_confidence) : 0.58,
       uncertainFolder: args.uncertain_folder || "待确认",
+      folderVisibility: args.folder_visibility || "private",
     });
     process.stdout.write(`${JSON.stringify({ ok: true, plan: result.file, assignments: result.plan.assignments.length }, null, 2)}\n`);
+    return;
+  }
+  if (command === "incremental") {
+    const run = resolveRun(args);
+    const result = prepareIncrementalRun(run, {
+      stateFile: args.state ? path.resolve(args.state) : undefined,
+    });
+    process.stdout.write(`${JSON.stringify({
+      ok: true,
+      state: result.stateFile,
+      full_count: result.summary.full_count,
+      new_count: result.summary.new_count,
+      incremental_source: path.join(run, "incremental-favorites.json"),
+    }, null, 2)}\n`);
+    return;
+  }
+  if (command === "commit-state") {
+    const run = resolveRun(args);
+    const result = commitIncrementalRun(run, {
+      stateFile: args.state ? path.resolve(args.state) : undefined,
+    });
+    process.stdout.write(`${JSON.stringify({ ok: true, state: result.stateFile, committed: result.committed }, null, 2)}\n`);
     return;
   }
   if (command === "journal") {
@@ -62,6 +87,8 @@ async function main() {
       ids: String(args.ids || "").split(","),
       status: args.status,
       verifiedCount: args.verified_count,
+      baselineCount: args.baseline_count,
+      finalCount: args.final_count,
       evidence: args.evidence,
     });
     process.stdout.write(`${JSON.stringify({ ok: true, journal: result.file, record: result.record }, null, 2)}\n`);
@@ -97,7 +124,7 @@ async function main() {
     process.stdout.write(`${JSON.stringify({ ok: true, manifest: output, dry_run_only: true }, null, 2)}\n`);
     return;
   }
-  const commands = ["collect", "draft", "validate", "preview", "approve", "manifest", "journal"];
+  const commands = ["collect", "incremental", "draft", "validate", "preview", "approve", "manifest", "journal", "commit-state"];
   throw new Error(`Unknown command. Use one of: ${commands.join(", ")}`);
 }
 

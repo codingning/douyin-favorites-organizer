@@ -36,3 +36,12 @@ test("approval token binds to plan contents", () => {
   assert.equal(manifest.dry_run_only, true);
   assert.equal(manifest.add_to_folders[0].videos.length, 1);
 });
+
+test("allows explicitly public folders in a valid plan", () => {
+  const { source, plan } = fixture();
+  plan.folders[0].visibility = "public";
+  assert.equal(validatePlan(plan, source).ok, true);
+  const approved = approvePlan(plan, approvalToken(plan));
+  const manifest = buildApplyManifest(approved, source);
+  assert.equal(manifest.create_folders[0].visibility, "public");
+});

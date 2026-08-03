@@ -1,3 +1,4 @@
+import fs from "node:fs";
 import path from "node:path";
 import { readJson, sha256, writeJson } from "./io.mjs";
 
@@ -54,6 +55,7 @@ export function classifyFavorite(favorite, { minimumConfidence = 0.58, uncertain
 
 export function buildDraftPlan(source, options = {}) {
   const uncertainFolder = options.uncertainFolder || "待确认";
+  const folderVisibility = options.folderVisibility || "private";
   const assignments = source.favorites.map(item => ({
     aweme_id: item.aweme_id,
     ...classifyFavorite(item, {
@@ -64,16 +66,16 @@ export function buildDraftPlan(source, options = {}) {
   const used = new Set(assignments.map(item => item.folder));
   const folders = DEFAULT_TAXONOMY
     .filter(category => used.has(category.name))
-    .map(({ name, description }) => ({ name, description, visibility: "private" }));
+    .map(({ name, description }) => ({ name, description, visibility: folderVisibility }));
   if (used.has(uncertainFolder)) {
-    folders.push({ name: uncertainFolder, description: "证据不足或分类置信度较低，等待人工确认", visibility: "private" });
+    folders.push({ name: uncertainFolder, description: "证据不足或分类置信度较低，等待人工确认", visibility: folderVisibility });
   }
   const plan = {
     schema_version: 1,
     generated_at: new Date().toISOString(),
     generator: "deterministic-seed-v1; refine with the Codex Skill before approval",
     source_sha256: source.source_sha256 || sha256(source.favorites),
-    existing_folders: [],
+    existing_folders: options.existingFolders || [],
     folders,
     assignments,
     approval: { status: "pending", token: null, approved_at: null },
@@ -82,8 +84,14 @@ export function buildDraftPlan(source, options = {}) {
 }
 
 export function writeDraftPlan(runDirectory, options = {}) {
-  const source = readJson(path.join(runDirectory, "favorites.json"));
-  const plan = buildDraftPlan(source, options);
+  const incrementalFile = path.join(runDirectory, "incremental-favorites.json");
+  const source = readJson(fs.existsSync(incrementalFile) ? incrementalFile : path.join(runDirectory, "favorites.json"));
+  const summaryFile = path.join(runDirectory, "incremental-summary.json");
+  const summary = fs.existsSync(summaryFile) ? readJson(summaryFile) : null;
+  const plan = buildDraftPlan(source, {
+    ...options,
+    existingFolders: options.existingFolders || summary?.existing_folders || [],
+  });
   const file = path.join(runDirectory, "classification-plan.json");
   writeJson(file, plan);
   return { file, plan };

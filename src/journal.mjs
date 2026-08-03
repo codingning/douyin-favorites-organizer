@@ -21,6 +21,8 @@ export function appendJournal(runDirectory, entry) {
     aweme_ids: ids,
     intended_count: ids.length,
     verified_count: Number(entry.verifiedCount || 0),
+    baseline_count: Number.isFinite(Number(entry.baselineCount)) ? Number(entry.baselineCount) : null,
+    final_count: Number.isFinite(Number(entry.finalCount)) ? Number(entry.finalCount) : null,
     status,
     evidence_type: evidence || "not-recorded",
   };

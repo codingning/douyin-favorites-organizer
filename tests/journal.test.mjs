@@ -12,9 +12,13 @@ test("journals only non-sensitive batch evidence", () => {
     ids: ["1", "2"],
     status: "verified",
     verifiedCount: 2,
+    baselineCount: 15,
+    finalCount: 17,
     evidence: "visible success toast",
   });
   assert.equal(result.record.verified_count, 2);
+  assert.equal(result.record.baseline_count, 15);
+  assert.equal(result.record.final_count, 17);
   assert.equal(fs.readFileSync(result.file, "utf8").trim().length > 0, true);
 });
 

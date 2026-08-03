@@ -4,5 +4,11 @@
   "minimum_confidence": 0.58,
   "uncertain_folder": "待确认",
   "preserve_existing_folders": true,
-  "require_preview_approval": true
+  "require_preview_approval": true,
+  "recurring_mode": {
+    "enabled": false,
+    "prefer_existing_folders": true,
+    "create_new_folder_when_no_durable_fit": true,
+    "max_new_folders_per_run": 2
+  }
 }

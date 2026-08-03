@@ -24,7 +24,7 @@ export function validatePlan(plan, source) {
     if ([...name].length > 15) errors.push(`folder name exceeds 15 characters: ${name}`);
     if (folderNames.has(name)) errors.push(`duplicate folder name: ${name}`);
     folderNames.add(name);
-    if (folder?.visibility !== "private") warnings.push(`folder will not be private: ${name}`);
+    if (!["private", "public"].includes(folder?.visibility)) errors.push(`invalid folder visibility: ${name}`);
   }
   if (folderNames.size > 15) errors.push("at most 15 folders may be proposed in one plan");
 

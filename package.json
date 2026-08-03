@@ -5,12 +5,14 @@
   "type": "module",
   "scripts": {
     "collect": "node src/cli.mjs collect",
+    "incremental": "node src/cli.mjs incremental",
     "draft": "node src/cli.mjs draft",
     "validate": "node src/cli.mjs validate",
     "preview": "node src/cli.mjs preview",
     "approve": "node src/cli.mjs approve",
     "manifest": "node src/cli.mjs manifest",
     "journal": "node src/cli.mjs journal",
+    "commit-state": "node src/cli.mjs commit-state",
     "browser-apply": "node scripts/apply-browser.mjs",
     "security-scan": "node scripts/security-scan.mjs",
     "test": "node --test tests/*.test.mjs"

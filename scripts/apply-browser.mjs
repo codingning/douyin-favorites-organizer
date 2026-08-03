@@ -156,8 +156,32 @@ async function folderCount(name) {
   })()`);
 }
 
-async function createFolder(name) {
+async function inspectFolders() {
+  await ensureSession();
+  await clickTab("semiTabfavorite_collection");
+  await clickTab("semiTabfavorite_folder");
+  const folders = await evaluate(`(() => {
+    return [...document.querySelectorAll('li')].map(row => {
+      const match = row.innerText?.match(/共\\s*(\\d+)\\s*作品/);
+      if (!match) return null;
+      const name = [...row.querySelectorAll('p')]
+        .map(element => element.innerText?.trim())
+        .find(text => text && !/^共\\s*\\d+\\s*作品$/.test(text));
+      if (!name) return null;
+      return {
+        name,
+        count: Number(match[1]),
+        visibility: row.querySelector('span[role=img]') ? 'private' : 'public'
+      };
+    }).filter(Boolean);
+  })()`);
+  return { ok: true, accountPage: true, folders };
+}
+
+async function createFolder(name, visibility) {
   if ([...name].length > 15) throw new Error(`Folder name exceeds 15 characters: ${name}`);
+  if (!["private", "public"].includes(visibility)) throw new Error(`Unsupported folder visibility: ${visibility}`);
+  const desiredPublicState = visibility === "public" ? "true" : "false";
   await clickTab("semiTabfavorite_folder");
   if (await folderVisible(name)) return { name, status: "existing" };
 
@@ -173,8 +197,9 @@ async function createFolder(name) {
     setter.call(input, ${JSON.stringify(name)});
     input.dispatchEvent(new Event('input', { bubbles: true }));
     input.dispatchEvent(new Event('change', { bubbles: true }));
-    if (control.getAttribute('aria-checked') === 'true') control.click();
-    return { ok: true };
+    const desired = ${JSON.stringify(desiredPublicState)};
+    if (control.getAttribute('aria-checked') !== desired) control.click();
+    return { ok: true, publicState: control.getAttribute('aria-checked') };
   })()`);
   if (!prepared.ok) throw new Error(`Could not prepare folder dialog: ${JSON.stringify(prepared)}`);
   await wait(0.4);
@@ -190,7 +215,7 @@ async function createFolder(name) {
       publicState: control?.getAttribute('aria-checked'),
       confirmDisabled: confirm?.disabled ?? true
     };
-    if (snapshot.inputValue !== ${JSON.stringify(name)} || snapshot.publicState !== 'false' || !confirm || confirm.disabled) {
+    if (snapshot.inputValue !== ${JSON.stringify(name)} || snapshot.publicState !== ${JSON.stringify(desiredPublicState)} || !confirm || confirm.disabled) {
       return { submitted: false, snapshot };
     }
     confirm.click();
@@ -202,12 +227,17 @@ async function createFolder(name) {
     await wait(0.5);
     const verified = await evaluate(`(() => {
       const dialogOpen = [...document.querySelectorAll('[role=dialog]')].some(element => element.offsetWidth || element.offsetHeight);
-      const visible = [...document.querySelectorAll('*')].some(element =>
+      const label = [...document.querySelectorAll('*')].find(element =>
         element.innerText?.trim() === ${JSON.stringify(name)} && (element.offsetWidth || element.offsetHeight)
       );
-      return { dialogOpen, visible };
+      const row = label?.closest('li') || label?.parentElement?.parentElement;
+      const privateIndicator = !!row?.querySelector('span[role=img]');
+      const visibilityMatches = ${JSON.stringify(visibility)} === 'public' ? !privateIndicator : privateIndicator;
+      return { dialogOpen, visible: !!label, visibilityMatches };
     })()`);
-    if (!verified.dialogOpen && verified.visible) return { name, status: "created", private: true };
+    if (!verified.dialogOpen && verified.visible && verified.visibilityMatches) {
+      return { name, status: "created", visibility };
+    }
   }
   throw new Error(`Folder creation result is unknown after submit: ${name}`);
 }
@@ -334,15 +364,22 @@ async function selectTargetIds(targetIds) {
 
 async function addFolderBatch(folder, videos, runDirectory) {
   const ids = videos.map(video => String(video.aweme_id));
+  const journalFile = path.join(runDirectory, "apply-journal.jsonl");
+  const priorVerified = fs.existsSync(journalFile)
+    ? fs.readFileSync(journalFile, "utf8").split(/\r?\n/u).filter(Boolean).map(line => JSON.parse(line)).some(entry => {
+      const recorded = [...(entry.aweme_ids || [])].map(String).sort();
+      return entry.status === "verified" && entry.folder === folder
+        && JSON.stringify(recorded) === JSON.stringify([...ids].sort());
+    })
+    : false;
+  if (priorVerified) {
+    appendJournal(runDirectory, { folder, ids, status: "verified", verifiedCount: ids.length, evidence: "exact batch already verified in journal" });
+    return { folder, status: "already-verified", videos: ids.length, verifiedCount: ids.length };
+  }
   const beforeCount = await folderCount(folder);
-  if (beforeCount === ids.length) {
-    appendJournal(runDirectory, { folder, ids, status: "verified", verifiedCount: ids.length, evidence: "folder item count already matched approved batch" });
-    return { folder, status: "already-applied", videos: ids.length, verifiedCount: beforeCount };
-  }
-  if (beforeCount !== 0) {
-    throw new Error(`Folder ${folder} has unexpected pre-existing count ${beforeCount}; expected 0 or ${ids.length}`);
-  }
-  appendJournal(runDirectory, { folder, ids, status: "started", verifiedCount: 0, evidence: "browser batch opened" });
+  if (beforeCount < 0) throw new Error(`Folder is missing or unreadable: ${folder}`);
+  const expectedCount = beforeCount + ids.length;
+  appendJournal(runDirectory, { folder, ids, status: "started", verifiedCount: 0, baselineCount: beforeCount, evidence: "browser batch opened" });
   let submitStarted = false;
   try {
     await enterManagement();
@@ -383,9 +420,17 @@ async function addFolderBatch(folder, videos, runDirectory) {
     for (let attempt = 0; attempt < 10; attempt += 1) {
       await wait(0.45);
       const afterCount = await folderCount(folder);
-      if (afterCount === ids.length) {
-        appendJournal(runDirectory, { folder, ids, status: "verified", verifiedCount: ids.length, evidence: "folder item count matched approved batch" });
-        return { folder, status: "verified", videos: ids.length, verifiedCount: afterCount };
+      if (afterCount === expectedCount) {
+        appendJournal(runDirectory, {
+          folder,
+          ids,
+          status: "verified",
+          verifiedCount: ids.length,
+          baselineCount: beforeCount,
+          finalCount: afterCount,
+          evidence: "folder item count increased by approved batch size",
+        });
+        return { folder, status: "verified", videos: ids.length, verifiedCount: ids.length, baselineCount: beforeCount, finalCount: afterCount };
       }
     }
     appendJournal(runDirectory, { folder, ids, status: "unknown", verifiedCount: 0, evidence: "submit completed but folder count did not match" });
@@ -410,6 +455,16 @@ function loadManifest(runDirectory) {
 async function main() {
   const [command] = process.argv.slice(2);
   const args = argsMap(process.argv.slice(3));
+
+  if (command === "inspect-folders") {
+    process.stdout.write(`${JSON.stringify(await inspectFolders(), null, 2)}\n`);
+    return;
+  }
+  if (command === "close") {
+    await runOpencli(["browser", SESSION, "close"], { json: false }).catch(() => {});
+    process.stdout.write(`${JSON.stringify({ ok: true, closed: true }, null, 2)}\n`);
+    return;
+  }
   if (!args.run) throw new Error("--run <directory> is required");
   const runDirectory = path.resolve(String(args.run));
   const manifest = loadManifest(runDirectory);
@@ -417,11 +472,6 @@ async function main() {
 
   if (command === "preflight") {
     process.stdout.write(`${JSON.stringify(await preflight(manifest), null, 2)}\n`);
-    return;
-  }
-  if (command === "close") {
-    await runOpencli(["browser", SESSION, "close"], { json: false }).catch(() => {});
-    process.stdout.write(`${JSON.stringify({ ok: true, closed: true }, null, 2)}\n`);
     return;
   }
   if (args.execute !== true || args.confirmation !== executionToken) {
@@ -432,8 +482,7 @@ async function main() {
   if (command === "create-folders") {
     const results = [];
     for (const folder of manifest.create_folders) {
-      if (folder.visibility !== "private") throw new Error(`Refusing non-private folder: ${folder.name}`);
-      results.push(await createFolder(folder.name));
+      results.push(await createFolder(folder.name, folder.visibility));
     }
     process.stdout.write(`${JSON.stringify({ ok: true, results }, null, 2)}\n`);
     return;
@@ -464,7 +513,7 @@ async function main() {
     process.stdout.write(`${JSON.stringify({ ok: true, result, unavailable: skipped.length, planned: batch.videos.length }, null, 2)}\n`);
     return;
   }
-  throw new Error("Use preflight, create-folders, add-folder, or close");
+  throw new Error("Use inspect-folders, preflight, create-folders, add-folder, or close");
 }
 
 main().catch(async error => {

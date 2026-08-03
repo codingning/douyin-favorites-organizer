@@ -1,99 +1,87 @@
 ---
 name: douyin-favorites-organizer
-description: Analyze the currently logged-in user's Douyin saved videos, propose stable content categories, generate a reviewable collection-folder plan, and after explicit approval create private folders and add the matching videos through the Douyin web UI. Use when a user asks to 整理/分类/归档抖音收藏夹、批量创建收藏夹、把收藏视频按内容放入文件夹、检查新增收藏，or resume a previously approved organizer run on Windows. Keep all account writes behind preview and action-time approval gates.
+description: Analyze and organize the currently logged-in user's Douyin saved videos into content-based collection folders on Windows. Use for one-time sorting, incremental checks of newly saved videos, adaptive taxonomy updates, safe creation of new durable folders, or an explicitly authorized recurring organizer. Preserve saved videos and existing folders; never delete or cancel favorites.
 ---
 
 # Douyin Favorites Organizer
 
-Use the repository's deterministic workflow. Keep this Skill thin: let the scripts collect, hash, validate, preview, approve, and journal the plan; use model judgment only to refine the taxonomy and individual classifications.
+Use the repository scripts for collection, incremental state, validation, approval fingerprints, browser application, and journaling. Use model judgment only for taxonomy and classification.
 
 ## Resolve the project
 
-Treat the directory two levels above this Skill as `PROJECT_ROOT`. Run all Node commands from that directory.
+Treat the directory two levels above this Skill as `PROJECT_ROOT`. Run Node commands there.
 
-## Safety contract
+## Non-negotiable safety
 
-- Reuse the user's browser login. Never request, print, copy, export, or persist passwords, QR contents, Cookies, Tokens, browser storage, request signatures, or transient media URLs.
-- Default every proposed folder to private. A public folder requires separate explicit approval.
-- Never click or invoke `取消收藏`. Adding a video to a collection folder must not remove its saved state.
-- Preserve existing folders. Do not rename or delete them automatically.
-- Treat collection, classification, approval, and account mutation as separate stages.
-- Stop after generating `preview.md` until the user explicitly approves that exact plan.
-- Even after plan approval, obtain an action-time confirmation immediately before the first Douyin write.
-- If the source reaches the 200-item collection ceiling, report that complete coverage is unproven and do not claim “all favorites”.
+- Reuse the user's signed-in browser. Never read, print, export, or persist passwords, QR contents, Cookies, Tokens, browser storage, request signatures, or transient media URLs.
+- Never click or invoke `取消收藏`. Folder assignment must not remove the original favorite.
+- Never delete, rename, merge, or hide an existing folder automatically.
+- Stop on login loss, CAPTCHA, changed selectors, ambiguous video IDs, unknown submit results, or count mismatches.
+- Treat the 200-item collection ceiling as incomplete coverage unless explicitly acknowledged.
 
-## Set up
+## Choose the authorization mode
 
-1. Verify Node.js `>=22.13` and run `npm install` in `PROJECT_ROOT`.
-2. Run `opencli --version` and require `1.8.6` for the current adapter contract.
-3. Ensure the verified read-only `douyin saved` adapter is installed. Prefer the existing adapter from the sibling `douyin-obsidian-knowledge` checkout on this machine; do not copy its dirty working tree.
-4. If Browser Bridge or login is unavailable, ask the user to connect the browser and sign in themselves. Resume after they confirm.
+### One-time mode
 
-## Build the preview
+Generate `preview.md`, wait for approval of its token, and obtain action-time confirmation before the first account write. Default new folders to private unless the user explicitly approves public visibility.
 
-1. Run `npm run collect -- --limit 200`. Record the returned run directory.
-2. Run `npm run draft -- --run <RUN_DIR>` to create a deterministic seed plan.
-3. Read `<RUN_DIR>/classification-input.json`, `<RUN_DIR>/classification-plan.json`, and [references/classification-policy.md](references/classification-policy.md).
-4. Refine the seed plan:
-   - Aim for 8–15 stable categories only when content diversity supports them.
-   - Keep folder names within 15 characters.
-   - Assign exactly one primary folder per video.
-   - Use title, author, hashtags, transcript, and OCR evidence when available.
-   - Put ambiguous items in `待确认`; never invent evidence.
-   - Keep `source_sha256` unchanged and reset `approval` to pending after any edit.
-5. Run `npm run validate -- --run <RUN_DIR>` until it returns `ok: true`.
-6. Run `npm run preview -- --run <RUN_DIR>` and present the summary, warnings, category counts, and approval token to the user. Do not expose the private full favorites list unless requested.
-7. Stop and wait for explicit approval of that exact preview.
+### Recurring incremental mode
 
-## Approve and prepare actions
+Use only when the user explicitly authorizes a recurring schedule and its account-write scope. The standing authorization may replace per-run preview and action-time confirmation only while every run stays inside all of these limits:
 
-After the user explicitly approves the preview:
+- Process only previously unseen `aweme_id` values.
+- Prefer existing folders when they are a genuine content fit.
+- Create a public folder when the content represents a durable user intent that does not reasonably fit an existing folder.
+- Create at most two new folders per run; route excess or low-confidence cases to `待确认`.
+- Do not silently reclassify previously processed videos.
+- Do not change visibility of existing folders.
+- Perform no writes when there are no new favorites.
 
-1. Run `npm run approve -- --run <RUN_DIR> --token <APPROVAL_TOKEN>`.
-2. Run `npm run manifest -- --run <RUN_DIR>`.
-3. Read `<RUN_DIR>/apply-manifest.json` and [references/browser-apply.md](references/browser-apply.md).
-4. Summarize the number of folders and videos that would be changed.
-5. Ask for the final action-time confirmation before touching Douyin.
+Any action outside this scope requires fresh user approval.
 
-Approval never authorizes deleting favorites, deleting folders, making folders public, outreach, publishing, or changing unrelated account settings.
+## One-time workflow
 
-## Apply through the web UI
+1. Run `npm run collect -- --limit 200` and record `RUN_DIR`.
+2. Run `npm run draft -- --run <RUN_DIR>`.
+3. Refine the plan using [references/classification-policy.md](references/classification-policy.md).
+4. Run `npm run validate -- --run <RUN_DIR>` and `npm run preview -- --run <RUN_DIR>`.
+5. Wait for the user to approve the exact token.
+6. Run `approve`, `manifest`, browser `preflight`, and the bounded apply commands described in [references/browser-apply.md](references/browser-apply.md).
 
-Use a browser surface that reuses the user's signed-in Douyin session. Follow [references/browser-apply.md](references/browser-apply.md) exactly.
+## Recurring incremental workflow
 
-Use the deterministic wrapper when the current web contract matches:
+1. Confirm `git status -sb` has no unexpected code changes. Runtime files under ignored `var/` are allowed.
+2. Run `npm run browser-apply -- inspect-folders` and record the current folder names, counts, and visibility.
+3. Run `npm run collect -- --limit 200` and record `RUN_DIR`.
+4. Run `npm run incremental -- --run <RUN_DIR>`.
+5. Read `incremental-summary.json`:
+   - If `new_count` is `0`, make no account changes and stop quietly.
+   - Otherwise read `classification-input.json`, `incremental-favorites.json`, and [references/classification-policy.md](references/classification-policy.md).
+6. Run `npm run draft -- --run <RUN_DIR> --folder-visibility public`, then refine `classification-plan.json`:
+   - Replace stale `existing_folders` with the current inspected names.
+   - Assign every new video exactly once.
+   - Reuse a current folder only when its meaning genuinely matches.
+   - Add a new public folder for a strong, reusable category that has no good existing home.
+   - Keep names at most 15 characters and create no more than two new folders in one run.
+   - Use `待确认` for weak, conflicting, or overly narrow evidence.
+   - Keep `source_sha256` unchanged and reset approval to pending after editing.
+7. Run `validate` and `preview`. Under a valid standing authorization, verify the preview against the recurring limits, then use its token with `approve` without asking again.
+8. Run `manifest`, browser `preflight`, `create-folders`, and one `add-folder` batch at a time.
+9. Require verified journal coverage for every new ID or an explicit `unavailable` record.
+10. Run `npm run commit-state -- --run <RUN_DIR>` only after all planned new IDs are verified or unavailable.
+11. Close the automation browser session. Report changes and failures; a no-op run may stay quiet.
 
-1. Run `npm run browser-apply -- preflight --run <RUN_DIR>`.
-2. Derive the execution token as `EXECUTE:<first 12 characters of plan_fingerprint>`.
-3. After action-time confirmation, run `npm run browser-apply -- create-folders --run <RUN_DIR> --execute --confirmation <TOKEN>`.
-4. Run one bounded folder batch at a time with `npm run browser-apply -- add-folder --run <RUN_DIR> --folder <NAME> --execute --confirmation <TOKEN>`.
-5. Run `npm run browser-apply -- close --run <RUN_DIR>` after final verification or on a stopped run.
+## Apply and verification
 
-For each folder:
+Follow [references/browser-apply.md](references/browser-apply.md). Derive the execution token as `EXECUTE:<first 12 characters of plan_fingerprint>`.
 
-1. Create it only if it does not already exist; keep `设置为公开` off.
-2. Enter the 收藏 → 视频 tab and open 批量管理.
-3. Select only video cards whose `/video/<aweme_id>` matches the manifest.
-4. Click `加入收藏夹`, choose the exact folder, and confirm.
-5. Verify the visible success state or resulting folder membership before journaling the batch.
-6. Exit management mode before moving to a different operation.
+Completion requires:
 
-Fail closed when selectors, counts, folder names, video IDs, confirmation state, or success evidence are ambiguous. Do not guess or fall back to `取消收藏`.
+- Plan validation passed and its fingerprint matches the manifest.
+- Every new folder has the requested visibility and a visible final state.
+- Existing-folder counts increased by the exact verified batch size.
+- Every new video is journaled as `verified` or `unavailable`.
+- Incremental state committed successfully.
+- No delete, rename, visibility change, `取消收藏`, or unrelated account action occurred.
 
-## Incremental runs
-
-Keep run artifacts under `var/runs/`. On a later run, compare `aweme_id` values against the latest approved manifest and propose only new or previously unresolved videos. Do not silently reclassify already applied videos; place changed recommendations in the preview for review.
-
-## Verify completion
-
-Require all of the following before reporting completion:
-
-- The collected set did not hit an unacknowledged coverage ceiling.
-- Plan validation passes.
-- The approved plan fingerprint matches the manifest.
-- Every planned folder has a verified final state.
-- Every batch has success evidence and a journal entry.
-- Every source video is either verified in a folder or explicitly recorded as unavailable in the current Douyin management UI.
-- No `取消收藏`, delete, public-folder, or unrelated account action occurred.
-
-Use `scripts/run-organizer.ps1` as the Windows wrapper when a direct npm command is inconvenient.
+Use `scripts/run-organizer.ps1` when direct npm commands are inconvenient.
