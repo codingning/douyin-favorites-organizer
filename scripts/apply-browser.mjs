@@ -160,8 +160,8 @@ async function inspectFolders() {
   await ensureSession();
   await clickTab("semiTabfavorite_collection");
   await clickTab("semiTabfavorite_folder");
-  const folders = await evaluate(`(() => {
-    return [...document.querySelectorAll('li')].map(row => {
+  const state = await evaluate(`(() => {
+    const folders = [...document.querySelectorAll('li')].map(row => {
       const match = row.innerText?.match(/共\\s*(\\d+)\\s*作品/);
       if (!match) return null;
       const name = [...row.querySelectorAll('p')]
@@ -174,8 +174,12 @@ async function inspectFolders() {
         visibility: row.querySelector('span[role=img]') ? 'private' : 'public'
       };
     }).filter(Boolean);
+    return {
+      accountName: document.querySelector('h1')?.innerText?.trim() || '',
+      folders
+    };
   })()`);
-  return { ok: true, accountPage: true, folders };
+  return { ok: true, accountPage: true, ...state };
 }
 
 async function createFolder(name, visibility) {
