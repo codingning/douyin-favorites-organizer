@@ -3,6 +3,8 @@ import path from "node:path";
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { appendJournal } from "../src/journal.mjs";
+import { browserWindowMode } from "../src/browser-session-policy.mjs";
+import { partitionMappedTargets } from "../src/browser-selection.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const OPENCLI = path.join(ROOT, "node_modules", "@jackwener", "opencli", "dist", "src", "main.js");
@@ -53,15 +55,15 @@ const browser = (...args) => runOpencli(["browser", SESSION, ...args]);
 const evaluate = js => browser("eval", js);
 const wait = seconds => runOpencli(["browser", SESSION, "wait", "time", String(seconds)], { json: false });
 
-async function ensureSession() {
+async function ensureSession(windowMode = "background") {
   try {
     const state = await evaluate("(() => ({url:location.href}))()");
     if (!String(state?.url || "").includes("douyin.com/user/self")) {
-      await browser("open", SELF_URL, "--window", "background");
+      await browser("open", SELF_URL, "--window", windowMode);
       await wait(2);
     }
   } catch {
-    await browser("open", SELF_URL, "--window", "background");
+    await browser("open", SELF_URL, "--window", windowMode);
     await wait(2);
   }
 }
@@ -104,8 +106,8 @@ async function clickExactText(text) {
   return result;
 }
 
-async function preflight(manifest) {
-  await ensureSession();
+async function preflight(manifest, windowMode = "background") {
+  await ensureSession(windowMode);
   await clickTab("semiTabfavorite_collection");
   const managementOpen = await evaluate("(() => document.body.innerText.includes('退出管理'))()");
   if (managementOpen) {
@@ -157,7 +159,7 @@ async function folderCount(name) {
 }
 
 async function inspectFolders() {
-  await ensureSession();
+  await ensureSession(browserWindowMode("inspect-folders"));
   await clickTab("semiTabfavorite_collection");
   await clickTab("semiTabfavorite_folder");
   const state = await evaluate(`(() => {
@@ -281,7 +283,9 @@ async function loadTargetIds(targetIds) {
   for (let attempt = 0; attempt < 50; attempt += 1) {
     const mapped = await evaluate(mappingExpression);
     const ids = new Set(mapped.map(item => item.id));
-    if (targetIds.every(id => ids.has(id))) return { mapped: ids.size, attempts: attempt + 1 };
+    if (targetIds.every(id => ids.has(id))) {
+      return { ...partitionMappedTargets(targetIds, ids), mapped: ids.size, attempts: attempt + 1 };
+    }
     if (ids.size === previous) stable += 1;
     else stable = 0;
     previous = ids.size;
@@ -304,8 +308,7 @@ async function loadTargetIds(targetIds) {
   }
   const final = await evaluate(mappingExpression);
   const ids = new Set(final.map(item => item.id));
-  const missing = targetIds.filter(id => !ids.has(id));
-  throw new Error(`Could not map ${missing.length} intended video(s): ${missing.join(",")}`);
+  return { ...partitionMappedTargets(targetIds, ids), mapped: ids.size, attempts: 50 };
 }
 
 async function selectTargetIds(targetIds) {
@@ -366,6 +369,23 @@ async function selectTargetIds(targetIds) {
   }
 }
 
+function recordUnavailableIds(runDirectory, folder, ids) {
+  if (!ids.length) return;
+  const file = path.join(runDirectory, "unavailable-video-ids.json");
+  const document = fs.existsSync(file)
+    ? JSON.parse(fs.readFileSync(file, "utf8"))
+    : { schema_version: 1, entries: [] };
+  const entries = new Map((document.entries || []).map(entry => [String(entry.aweme_id), entry]));
+  for (const id of ids) {
+    entries.set(String(id), {
+      aweme_id: String(id),
+      folder,
+      reason: "not rendered in Douyin batch management UI after full bounded scroll",
+    });
+  }
+  fs.writeFileSync(file, `${JSON.stringify({ schema_version: 1, entries: [...entries.values()] }, null, 2)}\n`, "utf8");
+}
+
 async function addFolderBatch(folder, videos, runDirectory) {
   const ids = videos.map(video => String(video.aweme_id));
   const journalFile = path.join(runDirectory, "apply-journal.jsonl");
@@ -382,13 +402,38 @@ async function addFolderBatch(folder, videos, runDirectory) {
   }
   const beforeCount = await folderCount(folder);
   if (beforeCount < 0) throw new Error(`Folder is missing or unreadable: ${folder}`);
-  const expectedCount = beforeCount + ids.length;
   appendJournal(runDirectory, { folder, ids, status: "started", verifiedCount: 0, baselineCount: beforeCount, evidence: "browser batch opened" });
   let submitStarted = false;
+  let attemptedIds = ids;
   try {
     await enterManagement();
-    await loadTargetIds(ids);
-    await selectTargetIds(ids);
+    const availability = await loadTargetIds(ids);
+    attemptedIds = availability.available;
+    if (availability.missing.length) {
+      recordUnavailableIds(runDirectory, folder, availability.missing);
+      appendJournal(runDirectory, {
+        folder,
+        ids: availability.missing,
+        status: "unavailable",
+        verifiedCount: 0,
+        evidence: "not rendered in Douyin batch management UI after full bounded scroll",
+      });
+    }
+    if (!attemptedIds.length) {
+      await clickExactText("退出管理");
+      await wait(0.5);
+      return {
+        folder,
+        status: "unavailable",
+        videos: 0,
+        verifiedCount: 0,
+        unavailable: availability.missing.length,
+        baselineCount: beforeCount,
+        finalCount: beforeCount,
+      };
+    }
+    const expectedCount = beforeCount + attemptedIds.length;
+    await selectTargetIds(attemptedIds);
     await clickExactText("加入收藏夹");
     await wait(0.7);
 
@@ -427,21 +472,29 @@ async function addFolderBatch(folder, videos, runDirectory) {
       if (afterCount === expectedCount) {
         appendJournal(runDirectory, {
           folder,
-          ids,
+          ids: attemptedIds,
           status: "verified",
-          verifiedCount: ids.length,
+          verifiedCount: attemptedIds.length,
           baselineCount: beforeCount,
           finalCount: afterCount,
           evidence: "folder item count increased by approved batch size",
         });
-        return { folder, status: "verified", videos: ids.length, verifiedCount: ids.length, baselineCount: beforeCount, finalCount: afterCount };
+        return {
+          folder,
+          status: "verified",
+          videos: attemptedIds.length,
+          verifiedCount: attemptedIds.length,
+          unavailable: availability.missing.length,
+          baselineCount: beforeCount,
+          finalCount: afterCount,
+        };
       }
     }
-    appendJournal(runDirectory, { folder, ids, status: "unknown", verifiedCount: 0, evidence: "submit completed but folder count did not match" });
+    appendJournal(runDirectory, { folder, ids: attemptedIds, status: "unknown", verifiedCount: 0, evidence: "submit completed but folder count did not match" });
     throw new Error(`Batch result is unknown after confirmation: ${folder}`);
   } catch (error) {
     if (!submitStarted) {
-      appendJournal(runDirectory, { folder, ids, status: "failed", verifiedCount: 0, evidence: "stopped before destination confirmation" });
+      appendJournal(runDirectory, { folder, ids: attemptedIds, status: "failed", verifiedCount: 0, evidence: "stopped before destination confirmation" });
     }
     throw error;
   }
@@ -475,13 +528,13 @@ async function main() {
   const executionToken = `EXECUTE:${manifest.plan_fingerprint.slice(0, 12)}`;
 
   if (command === "preflight") {
-    process.stdout.write(`${JSON.stringify(await preflight(manifest), null, 2)}\n`);
+    process.stdout.write(`${JSON.stringify(await preflight(manifest, browserWindowMode(command)), null, 2)}\n`);
     return;
   }
   if (args.execute !== true || args.confirmation !== executionToken) {
     throw new Error(`Account writes require --execute --confirmation ${executionToken}`);
   }
-  await preflight(manifest);
+  await preflight(manifest, browserWindowMode(command));
 
   if (command === "create-folders") {
     const results = [];
