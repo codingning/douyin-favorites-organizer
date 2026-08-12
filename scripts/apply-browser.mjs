@@ -3,7 +3,7 @@ import path from "node:path";
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { appendJournal } from "../src/journal.mjs";
-import { browserWindowMode } from "../src/browser-session-policy.mjs";
+import { browserSessionPolicy } from "../src/browser-session-policy.mjs";
 import { partitionMappedTargets } from "../src/browser-selection.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -55,7 +55,13 @@ const browser = (...args) => runOpencli(["browser", SESSION, ...args]);
 const evaluate = js => browser("eval", js);
 const wait = seconds => runOpencli(["browser", SESSION, "wait", "time", String(seconds)], { json: false });
 
-async function ensureSession(windowMode = "background") {
+async function ensureSession({ windowMode = "background", resetExisting = false } = {}) {
+  if (resetExisting) {
+    await runOpencli(["browser", SESSION, "close"], { json: false }).catch(() => {});
+    await browser("open", SELF_URL, "--window", windowMode);
+    await wait(2);
+    return;
+  }
   try {
     const state = await evaluate("(() => ({url:location.href}))()");
     if (!String(state?.url || "").includes("douyin.com/user/self")) {
@@ -159,7 +165,7 @@ async function folderCount(name) {
 }
 
 async function inspectFolders() {
-  await ensureSession(browserWindowMode("inspect-folders"));
+  await ensureSession(browserSessionPolicy("inspect-folders"));
   await clickTab("semiTabfavorite_collection");
   await clickTab("semiTabfavorite_folder");
   const state = await evaluate(`(() => {
@@ -528,13 +534,13 @@ async function main() {
   const executionToken = `EXECUTE:${manifest.plan_fingerprint.slice(0, 12)}`;
 
   if (command === "preflight") {
-    process.stdout.write(`${JSON.stringify(await preflight(manifest, browserWindowMode(command)), null, 2)}\n`);
+    process.stdout.write(`${JSON.stringify(await preflight(manifest, browserSessionPolicy(command)), null, 2)}\n`);
     return;
   }
   if (args.execute !== true || args.confirmation !== executionToken) {
     throw new Error(`Account writes require --execute --confirmation ${executionToken}`);
   }
-  await preflight(manifest, browserWindowMode(command));
+  await preflight(manifest, browserSessionPolicy(command));
 
   if (command === "create-folders") {
     const results = [];

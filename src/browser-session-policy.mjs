@@ -3,3 +3,10 @@ export function browserWindowMode(command) {
     ? "background"
     : "foreground";
 }
+
+export function browserSessionPolicy(command) {
+  return {
+    windowMode: browserWindowMode(command),
+    resetExisting: command !== "inspect-folders" && command !== "close",
+  };
+}
