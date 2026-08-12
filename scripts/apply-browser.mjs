@@ -4,7 +4,7 @@ import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { appendJournal } from "../src/journal.mjs";
 import { browserSessionPolicy, douyinFavoritesUrl } from "../src/browser-session-policy.mjs";
-import { partitionMappedTargets } from "../src/browser-selection.mjs";
+import { partitionMappedTargets, targetCheckboxSelector } from "../src/browser-selection.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const OPENCLI = path.join(ROOT, "node_modules", "@jackwener", "opencli", "dist", "src", "main.js");
@@ -339,16 +339,13 @@ async function selectTargetIds(targetIds) {
     if (missing.length) return { ok: false, error: 'missing', missing };
     const alreadyChecked = [...mapped.entries()].filter(([, checkbox]) => checkbox.checked).map(([id]) => id);
     if (alreadyChecked.length) return { ok: false, error: 'preselected', alreadyChecked };
-    for (const [id, checkbox] of mapped.entries()) {
-      const control = checkbox.parentElement?.parentElement || checkbox;
-      control.setAttribute('data-organizer-target', id);
-    }
+    for (const [id, checkbox] of mapped.entries()) checkbox.setAttribute('data-organizer-target', id);
     return { ok: true, marked: mapped.size };
   })()`);
   if (!marked.ok || marked.marked !== targetIds.length) throw new Error(`Video selection marking failed: ${JSON.stringify(marked)}`);
   for (const id of targetIds) {
-    const clicked = await browser("click", `[data-organizer-target="${id}"]`);
-    if (!clicked.clicked || clicked.matches_n !== 1) throw new Error(`Browser click failed for ${id}: ${JSON.stringify(clicked)}`);
+    const checked = await browser("check", targetCheckboxSelector(id));
+    if (!checked.checked || checked.matches_n !== 1) throw new Error(`Browser checkbox selection failed for ${id}: ${JSON.stringify(checked)}`);
   }
   await wait(0.5);
   const verified = await evaluate(`(() => {
