@@ -3,13 +3,13 @@ import path from "node:path";
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { appendJournal } from "../src/journal.mjs";
-import { browserSessionPolicy } from "../src/browser-session-policy.mjs";
+import { browserSessionPolicy, douyinFavoritesUrl } from "../src/browser-session-policy.mjs";
 import { partitionMappedTargets } from "../src/browser-selection.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const OPENCLI = path.join(ROOT, "node_modules", "@jackwener", "opencli", "dist", "src", "main.js");
 const SESSION = "douyin-organizer-apply";
-const SELF_URL = "https://www.douyin.com/user/self";
+const SELF_URL = douyinFavoritesUrl();
 
 function argsMap(values) {
   const result = { _: [] };
