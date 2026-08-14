@@ -1,0 +1,6 @@
+{
+  "name": "douyin-saved",
+  "version": "0.2.0",
+  "description": "Read saved videos from the currently authenticated Douyin account",
+  "opencli": ">=1.8.6"
+}

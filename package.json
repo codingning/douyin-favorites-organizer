@@ -4,6 +4,8 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "setup": "node scripts/setup-opencli-plugin.mjs",
+    "setup:opencli": "node scripts/setup-opencli-plugin.mjs",
     "collect": "node src/cli.mjs collect",
     "incremental": "node src/cli.mjs incremental",
     "draft": "node src/cli.mjs draft",
@@ -15,7 +17,7 @@
     "commit-state": "node src/cli.mjs commit-state",
     "browser-apply": "node scripts/apply-browser.mjs",
     "security-scan": "node scripts/security-scan.mjs",
-    "test": "node --test tests/*.test.mjs"
+    "test": "node --test tests/*.test.mjs opencli-plugin/tests/*.test.mjs"
   },
   "dependencies": {
     "@jackwener/opencli": "1.8.6"

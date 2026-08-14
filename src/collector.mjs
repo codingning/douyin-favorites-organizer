@@ -7,6 +7,10 @@ import { ensureDirectory, sha256, timestampId, writeJson } from "./io.mjs";
 const PROJECT_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const LOCAL_OPENCLI = path.join(PROJECT_ROOT, "node_modules", "@jackwener", "opencli", "dist", "src", "main.js");
 
+export function hasDouyinSavedCommand(output) {
+  return /^\s{2}saved(?:\s|\[)/mu.test(String(output || ""));
+}
+
 function run(command, args, options = {}) {
   return new Promise((resolve, reject) => {
     const child = spawn(command, args, {
@@ -48,6 +52,12 @@ export async function collectFavorites({ limit = 200, outputDirectory } = {}) {
   }
   if (!fs.existsSync(LOCAL_OPENCLI)) {
     throw new Error("Project-local OpenCLI is missing. Run npm install first.");
+  }
+  const help = await run(process.execPath, [LOCAL_OPENCLI, "douyin", "--help"]);
+  if (!hasDouyinSavedCommand(`${help.stdout}\n${help.stderr}`)) {
+    throw new Error(
+      "OpenCLI command `douyin saved` is unavailable. Run `npm run setup` from the project root, then retry.",
+    );
   }
   const { stdout, stderr } = await run(process.execPath, [
     LOCAL_OPENCLI,

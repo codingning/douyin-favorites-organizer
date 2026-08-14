@@ -11,6 +11,12 @@ Use the repository scripts for collection, incremental state, validation, approv
 
 Treat the directory two levels above this Skill as `PROJECT_ROOT`. Run Node commands there.
 
+## Bootstrap the collector dependency
+
+Before the first collection on a machine, run `npm install` and then `npm run setup` from `PROJECT_ROOT`.
+The OpenCLI npm package does not provide `douyin saved` by itself; `npm run setup` installs and verifies the repository's bundled read-only plugin.
+Do not continue when setup reports a conflicting plugin source. Inspect the reported path and ask before replacing or uninstalling anything.
+
 ## Non-negotiable safety
 
 - Reuse the user's signed-in browser. Never read, print, export, or persist passwords, QR contents, Cookies, Tokens, browser storage, request signatures, or transient media URLs.

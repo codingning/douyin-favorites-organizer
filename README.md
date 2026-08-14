@@ -78,7 +78,7 @@ flowchart LR
 - Node.js `>= 22.13`
 - npm
 - `@jackwener/opencli` `1.8.6`（已在项目依赖中固定）
-- 已配置可读取收藏的 OpenCLI 抖音适配器
+- 仓库内置的只读 `douyin saved` OpenCLI 插件（通过下方 `npm run setup` 安装并校验）
 - 已登录的抖音网页版及可用的浏览器桥
 
 ## 快速开始
@@ -87,9 +87,13 @@ flowchart LR
 git clone https://github.com/codingning/douyin-favorites-organizer.git
 Set-Location douyin-favorites-organizer
 npm install
+npm run setup
 npm test
 npm run security-scan
 ```
+
+`npm install` 只安装 OpenCLI 主程序；官方 `@jackwener/opencli@1.8.6` 本身没有 `douyin saved` 命令。
+`npm run setup` 会把仓库内置的只读插件注册到当前用户的 OpenCLI，并立即确认该命令可用。该步骤可重复执行；如果同名插件已存在但来源不同，安装程序会停止并提示检查，不会擅自覆盖。
 
 推荐让 Codex 从仓库根目录读取：
 
@@ -113,7 +117,7 @@ skills/douyin-favorites-organizer/SKILL.md
 npm run browser-apply -- inspect-folders
 ```
 
-采集收藏并生成本地运行目录：
+采集收藏并生成本地运行目录（首次使用前必须已成功执行 `npm run setup`）：
 
 ```powershell
 npm run collect -- --limit 200
@@ -195,7 +199,7 @@ npm run commit-state -- --run <RUN_DIR>
 
 当前代码验证：
 
-- Node 自动测试：`11/11` 通过；
+- Node 自动测试全部通过，并包含“隔离的全新用户目录从缺少 `saved` 到成功安装插件”的回归测试；
 - Codex Skill 结构校验通过；
 - 项目敏感信息扫描通过；
 - npm 官方安全审计：0 个已知漏洞；
@@ -213,6 +217,7 @@ npm run commit-state -- --run <RUN_DIR>
 
 ```powershell
 npm test
+npm run setup
 npm run security-scan
 npm audit --registry=https://registry.npmjs.org --audit-level=high
 node --check scripts/apply-browser.mjs

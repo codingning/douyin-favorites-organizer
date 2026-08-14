@@ -1,0 +1,13 @@
+{
+  "name": "opencli-plugin-douyin-saved",
+  "version": "0.2.0",
+  "private": true,
+  "type": "module",
+  "description": "Read saved videos from the currently authenticated Douyin account",
+  "scripts": {
+    "test": "node --test tests/*.test.mjs"
+  },
+  "peerDependencies": {
+    "@jackwener/opencli": ">=1.8.6"
+  }
+}
